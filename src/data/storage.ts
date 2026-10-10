@@ -209,10 +209,10 @@ export async function submitReview(data: {
     try {
       const { error } = await supabase.from('reviews').insert([reviewToRow(newReview)]);
       if (error) {
-        console.error('Supabase review insert error:', error.message);
+        console.warn('Supabase review insert notice (stored in local cache):', error.message);
       }
     } catch (err) {
-      console.error('Supabase review insert exception:', err);
+      console.warn('Supabase review insert exception (stored in local cache):', err);
     }
   }
 
@@ -232,7 +232,7 @@ export async function setReviewStatus(id: string, status: 'approved' | 'rejected
     try {
       await supabase.from('reviews').update({ status }).eq('id', id);
     } catch (err) {
-      console.error('Failed to update review status in Supabase:', err);
+      console.warn('Failed to update review status in Supabase:', err);
     }
   }
 }
@@ -254,7 +254,7 @@ export async function toggleReviewFeaturedStatus(id: string): Promise<void> {
     try {
       await supabase.from('reviews').update({ featured: nextFeatured }).eq('id', id);
     } catch (err) {
-      console.error('Failed to toggle review featured in Supabase:', err);
+      console.warn('Failed to toggle review featured in Supabase:', err);
     }
   }
 }
@@ -270,7 +270,7 @@ export async function removeReview(id: string): Promise<void> {
     try {
       await supabase.from('reviews').delete().eq('id', id);
     } catch (err) {
-      console.error('Failed to delete review in Supabase:', err);
+      console.warn('Failed to delete review in Supabase:', err);
     }
   }
 }
@@ -344,7 +344,7 @@ export async function createCustomPhoto(data: {
     try {
       await supabase.from('custom_photos').insert([photoToRow(newPhoto)]);
     } catch (err) {
-      console.error('Supabase photo insert error:', err);
+      console.warn('Supabase photo insert notice:', err);
     }
   }
 
@@ -362,7 +362,7 @@ export async function removeCustomPhoto(id: string): Promise<void> {
     try {
       await supabase.from('custom_photos').delete().eq('id', id);
     } catch (err) {
-      console.error('Supabase photo delete error:', err);
+      console.warn('Supabase photo delete notice:', err);
     }
   }
 }
@@ -475,7 +475,7 @@ export async function saveHotelSettings(settings: Partial<HotelSettings>): Promi
         .from('hotel_settings')
         .upsert({ id: 'default', google_review_url: settings.googleReviewUrl, updated_at: new Date().toISOString() });
     } catch (err) {
-      console.error('Failed to update hotel settings in Supabase:', err);
+      console.warn('Failed to update hotel settings in Supabase:', err);
     }
   }
 }
@@ -484,7 +484,19 @@ export async function isStaffAuthenticated(): Promise<boolean> {
   if (isSupabaseConfigured && supabase) {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) return true;
+      if (session?.user) {
+        // Verify user exists in admin_users or has staff claim
+        const { data: adminRow } = await supabase
+          .from('admin_users')
+          .select('id, role')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
+        if (adminRow) return true;
+        const role = (session.user.app_metadata as any)?.role;
+        if (role === 'admin' || role === 'hotel_staff') return true;
+        return false;
+      }
     } catch (_) {}
   }
   if (typeof window === 'undefined') return false;
@@ -501,7 +513,23 @@ export async function adminSignInWithEmail(email: string, password: string): Pro
       if (error) {
         return { success: false, error: error.message };
       }
-      if (data.session) {
+      if (data.session?.user) {
+        // Confirm user is an authorized staff member in admin_users
+        const { data: adminRow } = await supabase
+          .from('admin_users')
+          .select('id, role')
+          .eq('id', data.session.user.id)
+          .maybeSingle();
+
+        const role = (data.session.user.app_metadata as any)?.role;
+        if (!adminRow && role !== 'admin' && role !== 'hotel_staff') {
+          await supabase.auth.signOut();
+          return {
+            success: false,
+            error: 'Access denied: This account is not registered as authorized HOTEL ORA staff. Contact the administrator.',
+          };
+        }
+
         sessionStorage.setItem(ADMIN_AUTH_KEY, 'authenticated');
         return { success: true };
       }
