@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Maximize2, X, ChevronLeft, ChevronRight, MessageCircle } from 'lucide-react';
-import { HOTEL_CONFIG, GalleryItem, getWhatsAppBookingUrl } from '../data/hotelConfig';
+import { GalleryItem, getWhatsAppBookingUrl } from '../data/hotelConfig';
+import { getAllGalleryItems } from '../data/storage';
 import { HotelImage } from './HotelImage';
 import { useScrollReveal, getDirectionalRevealStyle } from '../hooks/useScrollReveal';
 
@@ -12,8 +13,21 @@ export const Gallery: React.FC = () => {
     threshold: 0.1,
   });
 
+  const [galleryItems, setGalleryItems] = useState<GalleryItem[]>(() => getAllGalleryItems());
   const [activeCategory, setActiveCategory] = useState<'ALL' | 'EXTERIOR' | 'RECEPTION' | 'ROOMS' | 'INTERIOR'>('ALL');
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setGalleryItems(getAllGalleryItems());
+    };
+    window.addEventListener('hotel-storage-updated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener('hotel-storage-updated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
+  }, []);
 
   const categories: Array<'ALL' | 'EXTERIOR' | 'RECEPTION' | 'ROOMS' | 'INTERIOR'> = [
     'ALL',
@@ -24,9 +38,9 @@ export const Gallery: React.FC = () => {
   ];
 
   const filteredItems = useMemo(() => {
-    if (activeCategory === 'ALL') return HOTEL_CONFIG.gallery;
-    return HOTEL_CONFIG.gallery.filter((item) => item.category === activeCategory);
-  }, [activeCategory]);
+    if (activeCategory === 'ALL') return galleryItems;
+    return galleryItems.filter((item) => item.category === activeCategory);
+  }, [activeCategory, galleryItems]);
 
   const handleNext = useCallback(() => {
     if (selectedIndex === null) return;

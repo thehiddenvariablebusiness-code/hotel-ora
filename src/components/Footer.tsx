@@ -4,7 +4,11 @@ import { HOTEL_CONFIG } from '../data/hotelConfig';
 import { useScrollReveal, getDirectionalRevealStyle } from '../hooks/useScrollReveal';
 import { HotelLogo } from './HotelLogo';
 
-export const Footer: React.FC = () => {
+interface FooterProps {
+  onOpenAdmin?: () => void;
+}
+
+export const Footer: React.FC<FooterProps> = ({ onOpenAdmin }) => {
   const { ref, isVisible, direction } = useScrollReveal({ threshold: 0.1 });
 
   const quickLinks = [
@@ -13,6 +17,7 @@ export const Footer: React.FC = () => {
     { label: 'Rooms', href: '#rooms' },
     { label: 'Amenities', href: '#amenities' },
     { label: 'Gallery', href: '#gallery' },
+    { label: 'Reviews', href: '#reviews' },
     { label: 'Location', href: '#location' },
     { label: 'Contact', href: '#contact' },
   ];
@@ -89,9 +94,21 @@ export const Footer: React.FC = () => {
         {/* Bottom Legal / Copyright */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between text-xs text-stone-500 gap-4">
           <p>© 2026 {HOTEL_CONFIG.name}. All rights reserved.</p>
-          <p className="text-[11px] text-stone-500">
-            Hojai, Assam 782436, India &bull; Direct Booking via Call &amp; WhatsApp
-          </p>
+          <div className="flex items-center gap-4 text-[11px] text-stone-500">
+            <span>Hojai, Assam 782436, India &bull; Direct Booking via Call &amp; WhatsApp</span>
+            {onOpenAdmin && (
+              <>
+                <span>&bull;</span>
+                <button
+                  type="button"
+                  onClick={onOpenAdmin}
+                  className="hover:text-stone-300 transition-colors underline-offset-2 hover:underline cursor-pointer"
+                >
+                  Staff Portal
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </footer>

@@ -21,6 +21,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBookingModal }) => {
     { id: 'rooms', label: 'Rooms', href: '#rooms' },
     { id: 'amenities', label: 'Amenities', href: '#amenities' },
     { id: 'gallery', label: 'Gallery', href: '#gallery' },
+    { id: 'reviews', label: 'Reviews', href: '#reviews' },
     { id: 'location', label: 'Location', href: '#location' },
     { id: 'contact', label: 'Contact', href: '#contact' },
   ];
