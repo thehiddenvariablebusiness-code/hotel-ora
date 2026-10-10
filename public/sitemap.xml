@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <url>
+    <loc>https://hotelora.co.in/</loc>
+    <lastmod>2026-10-10</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+    <image:image>
+      <image:loc>https://hotelora.co.in/images/hotel/hotel-exterior.png</image:loc>
+      <image:title>HOTEL ORA - Exterior Building &amp; Facade</image:title>
+      <image:caption>HOTEL ORA hotel building on Main Road opposite UCO Bank, Hojai, Assam</image:caption>
+    </image:image>
+    <image:image>
+      <image:loc>https://hotelora.co.in/images/hotel/hotel-reception.png</image:loc>
+      <image:title>HOTEL ORA - 24x7 Front Desk &amp; Reception Lobby</image:title>
+      <image:caption>Front desk and reception area welcoming guests at HOTEL ORA</image:caption>
+    </image:image>
+    <image:image>
+      <image:loc>https://hotelora.co.in/images/hotel/hotel-room-1.png</image:loc>
+      <image:title>HOTEL ORA - AC Deluxe Room</image:title>
+      <image:caption>Comfortable air-conditioned hotel room with modern amenities at HOTEL ORA</image:caption>
+    </image:image>
+  </url>
+</urlset>

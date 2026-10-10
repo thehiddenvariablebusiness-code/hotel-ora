@@ -1,0 +1,6 @@
+# Robots.txt for HOTEL ORA (https://hotelora.co.in)
+User-agent: *
+Allow: /
+
+# XML Sitemap
+Sitemap: https://hotelora.co.in/sitemap.xml
