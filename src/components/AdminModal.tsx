@@ -16,23 +16,34 @@ import {
   FileUp,
   Eye,
   EyeOff,
+  Database,
+  Cloud,
+  Check,
+  RefreshCw,
+  Mail,
+  Key,
 } from 'lucide-react';
 import {
   Review,
   CustomPhoto,
   getReviews,
-  updateReviewStatus,
-  toggleReviewFeatured,
-  deleteReview,
+  fetchAllReviews,
+  setReviewStatus,
+  toggleReviewFeaturedStatus,
+  removeReview,
   getCustomPhotos,
-  addCustomPhoto,
-  deleteCustomPhoto,
+  fetchCustomPhotos,
+  createCustomPhoto,
+  removeCustomPhoto,
+  uploadImageToStorage,
   isStaffAuthenticated,
-  verifyAndLoginAdmin,
-  logoutAdmin,
+  adminSignInWithEmail,
+  adminSignOut,
   getHotelSettings,
+  fetchHotelSettings,
   saveHotelSettings,
 } from '../data/storage';
+import { isSupabaseConfigured, SUPABASE_URL } from '../lib/supabase';
 
 interface AdminModalProps {
   isOpen: boolean;
@@ -41,9 +52,13 @@ interface AdminModalProps {
 
 export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loginMode, setLoginMode] = useState<'passcode' | 'email'>('passcode');
   const [passcode, setPasscode] = useState('');
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
   const [showPasscode, setShowPasscode] = useState(false);
   const [authError, setAuthError] = useState('');
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
 
   // Active tab: 'reviews' | 'photos' | 'settings'
   const [activeTab, setActiveTab] = useState<'reviews' | 'photos' | 'settings'>('reviews');
@@ -51,6 +66,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
   // Reviews data & sub-filter
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewFilter, setReviewFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [isLoadingReviews, setIsLoadingReviews] = useState(false);
 
   // Photo management state
   const [customPhotos, setCustomPhotos] = useState<CustomPhoto[]>([]);
@@ -58,33 +74,55 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
   const [newPhotoSubtitle, setNewPhotoSubtitle] = useState('');
   const [newPhotoCategory, setNewPhotoCategory] = useState<'EXTERIOR' | 'RECEPTION' | 'ROOMS' | 'INTERIOR'>('ROOMS');
   const [newPhotoDescription, setNewPhotoDescription] = useState('');
+  const [newPhotoFile, setNewPhotoFile] = useState<File | null>(null);
   const [newPhotoDataUrl, setNewPhotoDataUrl] = useState('');
   const [photoError, setPhotoError] = useState('');
   const [photoSuccess, setPhotoSuccess] = useState('');
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
 
   // Settings state
   const [newPasscode, setNewPasscode] = useState('');
   const [googleReviewUrl, setGoogleReviewUrl] = useState('');
   const [settingsSuccess, setSettingsSuccess] = useState('');
 
-  // Sync data
-  const refreshData = () => {
-    setReviews(getReviews());
-    setCustomPhotos(getCustomPhotos());
-    const s = getHotelSettings();
-    setGoogleReviewUrl(s.googleReviewUrl);
+  // Sync data from remote Supabase / local cache
+  const refreshData = async () => {
+    setIsLoadingReviews(true);
+    try {
+      setReviews(getReviews());
+      setCustomPhotos(getCustomPhotos());
+      const s = getHotelSettings();
+      setGoogleReviewUrl(s.googleReviewUrl);
+
+      // Async fetch to ensure fresh backend state
+      const [remoteReviews, remotePhotos, remoteSettings] = await Promise.all([
+        fetchAllReviews(),
+        fetchCustomPhotos(),
+        fetchHotelSettings(),
+      ]);
+      setReviews(remoteReviews);
+      setCustomPhotos(remotePhotos);
+      setGoogleReviewUrl(remoteSettings.googleReviewUrl);
+    } finally {
+      setIsLoadingReviews(false);
+    }
   };
 
   useEffect(() => {
     if (isOpen) {
-      setIsAuthenticated(isStaffAuthenticated());
-      refreshData();
+      isStaffAuthenticated().then((auth) => {
+        setIsAuthenticated(auth);
+        if (auth) {
+          refreshData();
+        }
+      });
     }
   }, [isOpen]);
 
   useEffect(() => {
     const handleStorageUpdate = () => {
-      refreshData();
+      setReviews(getReviews());
+      setCustomPhotos(getCustomPhotos());
     };
     window.addEventListener('hotel-storage-updated', handleStorageUpdate);
     return () => window.removeEventListener('hotel-storage-updated', handleStorageUpdate);
@@ -92,43 +130,58 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
 
   if (!isOpen) return null;
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (verifyAndLoginAdmin(passcode)) {
-      setIsAuthenticated(true);
-      setAuthError('');
-      setPasscode('');
-      refreshData();
-    } else {
-      setAuthError('Incorrect passcode. Please check and try again.');
+    setIsAuthenticating(true);
+    setAuthError('');
+
+    try {
+      const passwordToUse = loginMode === 'passcode' ? passcode : adminPassword;
+      const emailToUse = loginMode === 'passcode' ? '' : adminEmail;
+
+      const result = await adminSignInWithEmail(emailToUse, passwordToUse);
+      if (result.success) {
+        setIsAuthenticated(true);
+        setAuthError('');
+        setPasscode('');
+        setAdminPassword('');
+        refreshData();
+      } else {
+        setAuthError(result.error || 'Invalid credentials. Please verify and try again.');
+      }
+    } catch (err: any) {
+      setAuthError(err.message || 'Authentication error.');
+    } finally {
+      setIsAuthenticating(false);
     }
   };
 
-  const handleLogout = () => {
-    logoutAdmin();
+  const handleLogout = async () => {
+    await adminSignOut();
     setIsAuthenticated(false);
     setPasscode('');
+    setAdminPassword('');
   };
 
   // Review actions
-  const handleApprove = (id: string) => {
-    updateReviewStatus(id, 'approved');
+  const handleApprove = async (id: string) => {
+    await setReviewStatus(id, 'approved');
     refreshData();
   };
 
-  const handleReject = (id: string) => {
-    updateReviewStatus(id, 'rejected');
+  const handleReject = async (id: string) => {
+    await setReviewStatus(id, 'rejected');
     refreshData();
   };
 
-  const handleToggleFeatured = (id: string) => {
-    toggleReviewFeatured(id);
+  const handleToggleFeatured = async (id: string) => {
+    await toggleReviewFeaturedStatus(id);
     refreshData();
   };
 
-  const handleDeleteReview = (id: string) => {
+  const handleDeleteReview = async (id: string) => {
     if (window.confirm('Are you sure you want to permanently delete this review?')) {
-      deleteReview(id);
+      await removeReview(id);
       refreshData();
     }
   };
@@ -143,6 +196,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
       return;
     }
 
+    setNewPhotoFile(file);
     const reader = new FileReader();
     reader.onloadend = () => {
       setNewPhotoDataUrl(reader.result as string);
@@ -151,23 +205,37 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
     reader.readAsDataURL(file);
   };
 
-  const handleAddPhotoSubmit = (e: React.FormEvent) => {
+  const handleAddPhotoSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPhotoTitle.trim()) {
       setPhotoError('Please specify a title for the photo.');
       return;
     }
-    if (!newPhotoDataUrl.trim()) {
+    if (!newPhotoDataUrl.trim() && !newPhotoFile) {
       setPhotoError('Please upload an image file or provide an image link.');
       return;
     }
 
+    setIsUploadingPhoto(true);
+    setPhotoError('');
+
     try {
-      addCustomPhoto({
+      let finalImageUrl = newPhotoDataUrl.trim();
+
+      // If user uploaded a file, store in Supabase Storage bucket
+      if (newPhotoFile) {
+        try {
+          finalImageUrl = await uploadImageToStorage(newPhotoFile, 'gallery');
+        } catch (storageErr) {
+          console.warn('Storage upload fallback:', storageErr);
+        }
+      }
+
+      await createCustomPhoto({
         title: newPhotoTitle.trim(),
         subtitle: newPhotoSubtitle.trim() || 'HOTEL ORA',
         category: newPhotoCategory,
-        imageUrl: newPhotoDataUrl.trim(),
+        imageUrl: finalImageUrl,
         description: newPhotoDescription.trim() || newPhotoTitle.trim(),
       });
 
@@ -175,25 +243,28 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
       setNewPhotoTitle('');
       setNewPhotoSubtitle('');
       setNewPhotoDescription('');
+      setNewPhotoFile(null);
       setNewPhotoDataUrl('');
       setPhotoError('');
       refreshData();
 
       setTimeout(() => setPhotoSuccess(''), 3500);
     } catch (err) {
-      setPhotoError('Error saving photo. Storage quota might be reached.');
+      setPhotoError('Error saving photo. Please try again.');
+    } finally {
+      setIsUploadingPhoto(false);
     }
   };
 
-  const handleDeletePhoto = (id: string) => {
+  const handleDeletePhoto = async (id: string) => {
     if (window.confirm('Delete this uploaded photo from the gallery?')) {
-      deleteCustomPhoto(id);
+      await removeCustomPhoto(id);
       refreshData();
     }
   };
 
   // Settings actions
-  const handleSaveSettings = (e: React.FormEvent) => {
+  const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     const updateObj: Record<string, string> = {};
     if (googleReviewUrl.trim()) {
@@ -203,7 +274,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
       updateObj.adminPasscode = newPasscode.trim();
     }
 
-    saveHotelSettings(updateObj);
+    await saveHotelSettings(updateObj);
     setNewPasscode('');
     setSettingsSuccess('Settings successfully updated!');
     setTimeout(() => setSettingsSuccess(''), 3000);
@@ -212,7 +283,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
   // Export / Import
   const handleExportBackup = () => {
     const data = {
-      version: '1.0',
+      version: '2.0',
+      backend: isSupabaseConfigured ? 'supabase' : 'local-cache',
       exportedAt: new Date().toISOString(),
       reviews: getReviews(),
       photos: getCustomPhotos(),
@@ -245,7 +317,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
           localStorage.setItem('hotel_ora_settings_v1', JSON.stringify(json.settings));
         }
         refreshData();
-        alert('Backup data successfully restored!');
+        alert('Backup data successfully restored to cache!');
       } catch (err) {
         alert('Failed to parse backup file. Please ensure it is valid JSON.');
       }
@@ -253,34 +325,44 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
     reader.readAsText(file);
   };
 
-  const pendingCount = reviews.filter((r) => r.status === 'pending').length;
-
+  // Filter reviews
   const filteredReviews = reviews.filter((r) => {
     if (reviewFilter === 'all') return true;
     return r.status === reviewFilter;
   });
 
+  const pendingCount = reviews.filter((r) => r.status === 'pending').length;
+  const approvedCount = reviews.filter((r) => r.status === 'approved').length;
+  const rejectedCount = reviews.filter((r) => r.status === 'rejected').length;
+
   return (
-    <div
-      className="fixed inset-0 z-50 bg-stone-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200"
-      onClick={onClose}
-    >
-      <div
-        className="relative max-w-4xl w-full max-h-[92vh] bg-white rounded-3xl border border-stone-300 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 z-50 bg-stone-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+      <div className="relative w-full max-w-5xl bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-200">
         {/* Top Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 bg-stone-950 text-white shrink-0">
+        <div className="px-6 py-4 bg-stone-900 text-white flex items-center justify-between border-b border-stone-800 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-[#C5A880]/20 text-[#C5A880] flex items-center justify-center">
+            <div className="w-9 h-9 rounded-xl bg-[#C5A880]/20 border border-[#C5A880]/30 flex items-center justify-center text-[#E5D5B8]">
               <Lock className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm sm:text-base font-bold font-display tracking-wide">
-                HOTEL ORA &bull; Management Portal
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold tracking-wider uppercase font-display text-white">
+                  HOTEL ORA Staff Portal
+                </h3>
+                {isSupabaseConfigured ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-950/80 text-emerald-300 border border-emerald-600/50">
+                    <Cloud className="w-2.5 h-2.5" />
+                    Supabase Connected
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-950/80 text-amber-300 border border-amber-600/50">
+                    <Database className="w-2.5 h-2.5" />
+                    Local Cache Mode
+                  </span>
+                )}
+              </div>
               <p className="text-[11px] text-stone-400">
-                Staff Review Moderation &amp; Gallery Administration
+                Secure moderation for guest reviews and hotel gallery management
               </p>
             </div>
           </div>
@@ -289,7 +371,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
             {isAuthenticated && (
               <button
                 onClick={handleLogout}
-                className="px-3 py-1.5 rounded-lg bg-stone-850 hover:bg-stone-800 text-stone-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-colors"
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-stone-300 hover:text-white hover:bg-stone-800 transition-colors flex items-center gap-1.5"
                 title="Log out"
               >
                 <LogOut className="w-3.5 h-3.5" />
@@ -315,11 +397,37 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
             </div>
 
             <h4 className="text-xl font-bold text-stone-900 font-display mb-2">
-              Staff Passcode Required
+              Staff Portal Access
             </h4>
             <p className="text-xs text-stone-600 max-w-sm mb-6 leading-relaxed">
-              Enter your HOTEL ORA staff passcode to moderate guest reviews and manage hotel photos.
+              Sign in with your staff passcode or Supabase administrator credentials to moderate reviews.
             </p>
+
+            {/* Login Mode Toggle */}
+            <div className="inline-flex items-center p-1 bg-stone-200/80 rounded-xl mb-5 text-xs">
+              <button
+                type="button"
+                onClick={() => setLoginMode('passcode')}
+                className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${
+                  loginMode === 'passcode'
+                    ? 'bg-white text-stone-900 shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                Passcode
+              </button>
+              <button
+                type="button"
+                onClick={() => setLoginMode('email')}
+                className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${
+                  loginMode === 'email'
+                    ? 'bg-white text-stone-900 shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                Email &amp; Password
+              </button>
+            </div>
 
             <form onSubmit={handleLogin} className="w-full max-w-sm space-y-4">
               {authError && (
@@ -329,33 +437,68 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
                 </div>
               )}
 
-              <div className="relative">
-                <input
-                  type={showPasscode ? 'text' : 'password'}
-                  required
-                  placeholder="Enter Passcode (default: ora782436)"
-                  value={passcode}
-                  onChange={(e) => setPasscode(e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-stone-300 rounded-xl text-xs text-stone-900 placeholder:text-stone-400 focus:outline-none focus:border-[#C5A880] focus:ring-1 focus:ring-[#C5A880] transition-colors pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPasscode(!showPasscode)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-1"
-                >
-                  {showPasscode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
+              {loginMode === 'passcode' ? (
+                <div className="relative">
+                  <input
+                    type={showPasscode ? 'text' : 'password'}
+                    required
+                    placeholder="Enter Passcode (default: ora782436)"
+                    value={passcode}
+                    onChange={(e) => setPasscode(e.target.value)}
+                    className="w-full px-4 py-3 bg-white border border-stone-300 rounded-xl text-xs text-stone-900 placeholder:text-stone-400 focus:outline-none focus:border-[#C5A880] focus:ring-1 focus:ring-[#C5A880] transition-colors pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasscode(!showPasscode)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-1"
+                  >
+                    {showPasscode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3 text-left">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-stone-600 uppercase mb-1">Email</label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="email"
+                        required
+                        placeholder="admin@hotelora.com"
+                        value={adminEmail}
+                        onChange={(e) => setAdminEmail(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2.5 bg-white border border-stone-300 rounded-xl text-xs text-stone-900 focus:outline-none focus:border-[#C5A880]"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-stone-600 uppercase mb-1">Password</label>
+                    <div className="relative">
+                      <Key className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="password"
+                        required
+                        placeholder="••••••••"
+                        value={adminPassword}
+                        onChange={(e) => setAdminPassword(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2.5 bg-white border border-stone-300 rounded-xl text-xs text-stone-900 focus:outline-none focus:border-[#C5A880]"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <button
                 type="submit"
-                className="w-full py-3 bg-stone-900 hover:bg-stone-850 active:scale-[0.99] text-white rounded-xl text-xs font-semibold uppercase tracking-wider transition-all duration-200 shadow-xs"
+                disabled={isAuthenticating}
+                className="w-full py-3 bg-stone-900 hover:bg-stone-850 active:scale-[0.99] text-white rounded-xl text-xs font-semibold uppercase tracking-wider transition-all duration-200 shadow-xs flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                Access Portal
+                {isAuthenticating && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                <span>{isAuthenticating ? 'Signing in...' : 'Access Portal'}</span>
               </button>
 
               <p className="text-[11px] text-stone-400">
-                Default access code for management: <code className="text-stone-700 font-mono font-semibold">ora782436</code>
+                Staff passcode fallback: <code className="text-stone-700 font-mono font-semibold">ora782436</code>
               </p>
             </form>
           </div>
@@ -374,8 +517,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
               >
                 <span>Review Moderation</span>
                 {pendingCount > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white">
-                    {pendingCount} Pending
+                  <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">
+                    {pendingCount}
                   </span>
                 )}
               </button>
@@ -389,12 +532,10 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
                 }`}
               >
                 <ImageIcon className="w-3.5 h-3.5" />
-                <span>Gallery Photo Management</span>
-                {customPhotos.length > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-stone-200 text-stone-700">
-                    +{customPhotos.length}
-                  </span>
-                )}
+                <span>Gallery Photos</span>
+                <span className="px-1.5 py-0.5 rounded-full bg-stone-100 text-stone-600 text-[10px] font-bold">
+                  {customPhotos.length}
+                </span>
               </button>
 
               <button
@@ -406,204 +547,227 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
                 }`}
               >
                 <Settings className="w-3.5 h-3.5" />
-                <span>Settings &amp; Backup</span>
+                <span>Backend &amp; Settings</span>
               </button>
+
+              <div className="ml-auto flex items-center gap-2 py-2">
+                <button
+                  type="button"
+                  onClick={refreshData}
+                  disabled={isLoadingReviews}
+                  className="px-2.5 py-1 text-xs text-stone-500 hover:text-stone-800 flex items-center gap-1.5 rounded-lg border border-stone-200 hover:bg-stone-50 transition-colors"
+                  title="Reload data"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isLoadingReviews ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">Refresh</span>
+                </button>
+              </div>
             </div>
 
             {/* Tab 1: Review Moderation */}
             {activeTab === 'reviews' && (
-              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
-                {/* Sub-filter Bar */}
-                <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-stone-200">
+              <div className="flex-1 flex flex-col min-h-0">
+                {/* Sub-filters Bar */}
+                <div className="px-6 py-3 bg-stone-50 border-b border-stone-200 flex flex-wrap items-center justify-between gap-3 shrink-0">
                   <div className="flex items-center gap-1.5">
-                    {(['all', 'pending', 'approved', 'rejected'] as const).map((filter) => {
-                      const count =
-                        filter === 'all'
-                          ? reviews.length
-                          : reviews.filter((r) => r.status === filter).length;
-                      return (
-                        <button
-                          key={filter}
-                          onClick={() => setReviewFilter(filter)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-colors ${
-                            reviewFilter === filter
-                              ? 'bg-stone-900 text-white'
-                              : 'bg-stone-100 text-stone-600 hover:bg-stone-200 hover:text-stone-900'
-                          }`}
-                        >
-                          {filter} ({count})
-                        </button>
-                      );
-                    })}
+                    <button
+                      onClick={() => setReviewFilter('all')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        reviewFilter === 'all'
+                          ? 'bg-stone-900 text-white'
+                          : 'bg-white text-stone-600 border border-stone-200 hover:bg-stone-100'
+                      }`}
+                    >
+                      All ({reviews.length})
+                    </button>
+                    <button
+                      onClick={() => setReviewFilter('pending')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 ${
+                        reviewFilter === 'pending'
+                          ? 'bg-amber-600 text-white'
+                          : 'bg-white text-amber-700 border border-amber-200 hover:bg-amber-50'
+                      }`}
+                    >
+                      <span>Pending</span>
+                      {pendingCount > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full bg-white/20 text-[10px]">
+                          {pendingCount}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setReviewFilter('approved')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        reviewFilter === 'approved'
+                          ? 'bg-emerald-700 text-white'
+                          : 'bg-white text-emerald-700 border border-emerald-200 hover:bg-emerald-50'
+                      }`}
+                    >
+                      Approved ({approvedCount})
+                    </button>
+                    <button
+                      onClick={() => setReviewFilter('rejected')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        reviewFilter === 'rejected'
+                          ? 'bg-red-700 text-white'
+                          : 'bg-white text-red-700 border border-red-200 hover:bg-red-50'
+                      }`}
+                    >
+                      Rejected ({rejectedCount})
+                    </button>
                   </div>
 
-                  <span className="text-[11px] text-stone-400">
-                    Showing {filteredReviews.length} of {reviews.length} total
+                  <span className="text-xs text-stone-500">
+                    Showing {filteredReviews.length} of {reviews.length} total reviews
                   </span>
                 </div>
 
-                {filteredReviews.length === 0 ? (
-                  <div className="py-16 text-center text-stone-500 bg-white rounded-2xl border border-dashed border-stone-300">
-                    <p className="text-sm font-medium">No reviews in &ldquo;{reviewFilter}&rdquo; status.</p>
-                    <p className="text-xs text-stone-400 mt-1">
-                      New guest reviews submitted from the website will appear here for approval.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {filteredReviews.map((rev) => (
+                {/* Reviews List */}
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+                  {filteredReviews.length === 0 ? (
+                    <div className="p-12 text-center bg-white rounded-2xl border border-stone-200">
+                      <Star className="w-10 h-10 text-stone-300 mx-auto mb-3" />
+                      <p className="text-sm font-semibold text-stone-700 font-display">
+                        No reviews found in this filter
+                      </p>
+                      <p className="text-xs text-stone-400 mt-1 max-w-sm mx-auto">
+                        Guest reviews submitted via the public &ldquo;Write a Review&rdquo; button will appear here for moderation.
+                      </p>
+                    </div>
+                  ) : (
+                    filteredReviews.map((rev) => (
                       <div
                         key={rev.id}
-                        className={`p-4 sm:p-5 rounded-2xl border bg-white transition-all ${
-                          rev.status === 'pending'
-                            ? 'border-amber-300 ring-1 ring-amber-200/50'
-                            : rev.status === 'approved'
-                            ? 'border-emerald-200'
-                            : 'border-red-200 bg-stone-50/50'
-                        }`}
+                        className="bg-white p-5 rounded-2xl border border-stone-200 shadow-xs flex flex-col sm:flex-row gap-5 items-start justify-between"
                       >
-                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                          {/* Review Details */}
-                          <div className="flex-1 space-y-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              {/* Status Badge */}
-                              <span
-                                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                                  rev.status === 'pending'
-                                    ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                                    : rev.status === 'approved'
-                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                    : 'bg-red-100 text-red-800 border border-red-300'
-                                }`}
-                              >
-                                {rev.status}
-                              </span>
-
-                              {rev.featured && (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#C5A880]/20 text-[#8F6B38] flex items-center gap-1">
-                                  <Sparkles className="w-3 h-3" />
-                                  <span>Featured on Home</span>
-                                </span>
-                              )}
-
-                              <span className="text-xs font-bold text-stone-900">
-                                {rev.guestName}
-                              </span>
-
-                              {rev.stayDate && (
-                                <span className="text-[11px] text-stone-500">
-                                  ({rev.stayDate})
-                                </span>
-                              )}
-
-                              <span className="text-[11px] text-stone-400">
-                                &bull; {new Date(rev.createdAt).toLocaleString()}
-                              </span>
-                            </div>
-
-                            {/* Stars */}
-                            <div className="flex items-center gap-0.5 text-amber-500">
-                              {[1, 2, 3, 4, 5].map((s) => (
+                        <div className="flex-1 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-bold text-stone-900">
+                              {rev.guestName}
+                            </span>
+                            <span className="text-stone-300">•</span>
+                            <div className="flex items-center text-amber-500">
+                              {Array.from({ length: 5 }).map((_, i) => (
                                 <Star
-                                  key={s}
+                                  key={i}
                                   className={`w-3.5 h-3.5 ${
-                                    s <= rev.rating ? 'fill-current' : 'text-stone-300'
+                                    i < rev.rating ? 'fill-amber-400 text-amber-400' : 'text-stone-200'
                                   }`}
                                 />
                               ))}
-                              <span className="text-xs font-semibold text-stone-700 ml-1.5">
-                                {rev.rating}/5
-                              </span>
                             </div>
+                            <span className="text-xs text-stone-400">
+                              {new Date(rev.createdAt).toLocaleDateString()}
+                            </span>
 
-                            {/* Message */}
-                            <p className="text-xs text-stone-700 leading-relaxed bg-stone-50 p-3 rounded-xl border border-stone-100">
-                              &ldquo;{rev.message}&rdquo;
-                            </p>
-
-                            {/* Optional Attached Guest Photo */}
-                            {rev.photoUrl && (
-                              <div className="flex items-center gap-2 pt-1">
-                                <span className="text-[11px] text-stone-500">Guest Photo:</span>
-                                <img
-                                  src={rev.photoUrl}
-                                  alt={rev.guestName}
-                                  className="w-10 h-10 rounded-lg object-cover border border-stone-300"
-                                />
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Action Buttons */}
-                          <div className="flex sm:flex-col items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-stone-100">
-                            {rev.status !== 'approved' && (
-                              <button
-                                onClick={() => handleApprove(rev.id)}
-                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs"
-                                title="Approve & Publish to Website"
-                              >
-                                <CheckCircle className="w-3.5 h-3.5" />
-                                <span>Approve</span>
-                              </button>
-                            )}
-
-                            {rev.status !== 'rejected' && (
-                              <button
-                                onClick={() => handleReject(rev.id)}
-                                className="px-3 py-1.5 bg-stone-100 hover:bg-red-50 hover:text-red-700 text-stone-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors border border-stone-200"
-                                title="Reject review"
-                              >
-                                <XCircle className="w-3.5 h-3.5 text-stone-500" />
-                                <span>Reject</span>
-                              </button>
-                            )}
-
-                            {rev.status === 'approved' && (
-                              <button
-                                onClick={() => handleToggleFeatured(rev.id)}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
-                                  rev.featured
-                                    ? 'bg-[#C5A880] text-stone-950 font-bold'
-                                    : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
-                                }`}
-                                title="Toggle Featured badge"
-                              >
-                                <Sparkles className="w-3.5 h-3.5" />
-                                <span>{rev.featured ? 'Featured ★' : 'Feature'}</span>
-                              </button>
-                            )}
-
-                            <button
-                              onClick={() => handleDeleteReview(rev.id)}
-                              className="p-1.5 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Delete permanently"
+                            {/* Status badge */}
+                            <span
+                              className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                                rev.status === 'approved'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : rev.status === 'pending'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}
                             >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                              {rev.status}
+                            </span>
+
+                            {rev.featured && (
+                              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 flex items-center gap-1">
+                                <Sparkles className="w-2.5 h-2.5" />
+                                Featured
+                              </span>
+                            )}
                           </div>
+
+                          {rev.stayDate && (
+                            <p className="text-xs text-stone-500 italic">
+                              Stay date: {rev.stayDate}
+                            </p>
+                          )}
+
+                          <p className="text-xs text-stone-700 leading-relaxed whitespace-pre-line">
+                            &ldquo;{rev.message}&rdquo;
+                          </p>
+
+                          {rev.photoUrl && (
+                            <div className="pt-2">
+                              <img
+                                src={rev.photoUrl}
+                                alt="Guest"
+                                className="w-14 h-14 rounded-xl object-cover border border-stone-200"
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex sm:flex-col gap-2 shrink-0 self-stretch sm:self-auto justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-stone-100">
+                          {rev.status !== 'approved' && (
+                            <button
+                              onClick={() => handleApprove(rev.id)}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5" />
+                              <span>Approve</span>
+                            </button>
+                          )}
+
+                          {rev.status !== 'rejected' && (
+                            <button
+                              onClick={() => handleReject(rev.id)}
+                              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                            >
+                              <XCircle className="w-3.5 h-3.5" />
+                              <span>Reject</span>
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => handleToggleFeatured(rev.id)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors border ${
+                              rev.featured
+                                ? 'bg-purple-50 text-purple-800 border-purple-200 hover:bg-purple-100'
+                                : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
+                            }`}
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>{rev.featured ? 'Unfeature' : 'Feature'}</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleDeleteReview(rev.id)}
+                            className="px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Delete</span>
+                          </button>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    ))
+                  )}
+                </div>
               </div>
             )}
 
-            {/* Tab 2: Photo Management */}
+            {/* Tab 2: Gallery Photos */}
             {activeTab === 'photos' && (
               <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-                {/* Upload Form */}
+                {/* Upload new photo form */}
                 <div className="bg-white p-5 sm:p-6 rounded-2xl border border-stone-200 shadow-xs">
-                  <div className="flex items-center gap-2 mb-4">
+                  <h4 className="text-sm font-bold text-stone-900 font-display mb-1 flex items-center gap-2">
                     <Upload className="w-4 h-4 text-[#8F6B38]" />
-                    <h4 className="text-sm font-bold text-stone-900 font-display">
-                      Add New Photo to HOTEL ORA Gallery
-                    </h4>
-                  </div>
+                    <span>Add New Photo to Hotel Gallery</span>
+                  </h4>
+                  <p className="text-xs text-stone-500 mb-4">
+                    Uploaded photos will be saved directly to the database and displayed in the public gallery.
+                  </p>
 
                   {photoError && (
-                    <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl">
-                      {photoError}
+                    <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center gap-2">
+                      <ShieldAlert className="w-4 h-4 text-red-500 shrink-0" />
+                      <span>{photoError}</span>
                     </div>
                   )}
 
@@ -623,28 +787,13 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
                         <input
                           type="text"
                           required
-                          placeholder="e.g. Deluxe Room With Balcony"
                           value={newPhotoTitle}
                           onChange={(e) => setNewPhotoTitle(e.target.value)}
+                          placeholder="e.g. Deluxe Room Bedding, Reception Desk"
                           className="w-full px-3 py-2 bg-[#FAF9F5] border border-stone-300 rounded-xl text-xs text-stone-900 focus:outline-none focus:border-[#C5A880]"
                         />
                       </div>
 
-                      <div>
-                        <label className="block text-xs font-semibold text-stone-700 mb-1">
-                          Subtitle / Location Tag
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. 2nd Floor / Main Entrance"
-                          value={newPhotoSubtitle}
-                          onChange={(e) => setNewPhotoSubtitle(e.target.value)}
-                          className="w-full px-3 py-2 bg-[#FAF9F5] border border-stone-300 rounded-xl text-xs text-stone-900 focus:outline-none focus:border-[#C5A880]"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs font-semibold text-stone-700 mb-1">
                           Category *
@@ -664,30 +813,45 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
                           <option value="INTERIOR">INTERIOR</option>
                         </select>
                       </div>
+                    </div>
 
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs font-semibold text-stone-700 mb-1">
-                          Short Description
+                          Subtitle (Optional)
                         </label>
                         <input
                           type="text"
-                          placeholder="e.g. Freshly furnished spacious room"
+                          value={newPhotoSubtitle}
+                          onChange={(e) => setNewPhotoSubtitle(e.target.value)}
+                          placeholder="e.g. HOTEL ORA • Hojai"
+                          className="w-full px-3 py-2 bg-[#FAF9F5] border border-stone-300 rounded-xl text-xs text-stone-900 focus:outline-none focus:border-[#C5A880]"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-stone-700 mb-1">
+                          Description (Optional)
+                        </label>
+                        <input
+                          type="text"
                           value={newPhotoDescription}
                           onChange={(e) => setNewPhotoDescription(e.target.value)}
+                          placeholder="Short description for preview modal"
                           className="w-full px-3 py-2 bg-[#FAF9F5] border border-stone-300 rounded-xl text-xs text-stone-900 focus:outline-none focus:border-[#C5A880]"
                         />
                       </div>
                     </div>
 
-                    {/* Image selector: File upload or URL */}
-                    <div className="space-y-2">
-                      <label className="block text-xs font-semibold text-stone-700">
-                        Upload Image File or Enter URL *
+                    {/* Image selector */}
+                    <div>
+                      <label className="block text-xs font-semibold text-stone-700 mb-1">
+                        Upload Image File or Provide Direct URL *
                       </label>
-                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                        <label className="cursor-pointer inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-stone-900 text-white rounded-xl text-xs font-semibold hover:bg-stone-850 transition-colors shrink-0">
-                          <Upload className="w-3.5 h-3.5" />
-                          <span>Select Photo File</span>
+                      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                        <label className="cursor-pointer px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-semibold flex items-center gap-2 border border-stone-300 transition-colors">
+                          <Upload className="w-4 h-4 text-stone-600" />
+                          <span>Choose Local File</span>
                           <input
                             type="file"
                             accept="image/*"
@@ -696,57 +860,52 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
                           />
                         </label>
 
-                        <span className="text-xs text-stone-400 text-center sm:text-left">or URL:</span>
+                        <span className="text-xs text-stone-400">or</span>
 
                         <input
                           type="url"
-                          placeholder="https://example.com/photo.jpg"
                           value={newPhotoDataUrl.startsWith('data:') ? '' : newPhotoDataUrl}
                           onChange={(e) => setNewPhotoDataUrl(e.target.value)}
-                          className="flex-1 px-3 py-2 bg-[#FAF9F5] border border-stone-300 rounded-xl text-xs text-stone-900 focus:outline-none focus:border-[#C5A880]"
+                          placeholder="https://example.com/photo.jpg"
+                          className="flex-1 w-full px-3 py-2 bg-[#FAF9F5] border border-stone-300 rounded-xl text-xs text-stone-900 focus:outline-none focus:border-[#C5A880]"
                         />
                       </div>
 
                       {newPhotoDataUrl && (
-                        <div className="mt-3 p-3 bg-stone-100 rounded-xl flex items-center gap-4">
+                        <div className="mt-3 flex items-center gap-3">
                           <img
                             src={newPhotoDataUrl}
                             alt="Preview"
-                            className="w-20 h-16 object-cover rounded-lg border border-stone-300"
+                            className="w-20 h-14 object-cover rounded-xl border border-stone-300 shadow-xs"
                           />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-stone-900 truncate">
-                              Ready for upload ({newPhotoCategory})
-                            </p>
-                            <p className="text-[11px] text-stone-500">
-                              Will display immediately in the public Gallery
-                            </p>
-                          </div>
                           <button
                             type="button"
-                            onClick={() => setNewPhotoDataUrl('')}
-                            className="text-xs text-red-600 hover:underline px-2"
+                            onClick={() => {
+                              setNewPhotoDataUrl('');
+                              setNewPhotoFile(null);
+                            }}
+                            className="text-xs text-red-600 hover:underline"
                           >
-                            Remove
+                            Remove preview
                           </button>
                         </div>
                       )}
                     </div>
 
-                    <div className="pt-2 flex justify-end">
-                      <button
-                        type="submit"
-                        className="px-6 py-2.5 bg-[#C5A880] hover:bg-[#b59870] text-stone-950 font-bold rounded-xl text-xs uppercase tracking-wider transition-colors shadow-xs"
-                      >
-                        Publish Photo to Gallery
-                      </button>
-                    </div>
+                    <button
+                      type="submit"
+                      disabled={isUploadingPhoto}
+                      className="px-6 py-2.5 bg-stone-900 hover:bg-stone-850 active:scale-[0.99] text-white rounded-xl text-xs font-semibold uppercase tracking-wider transition-all duration-200 shadow-xs flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {isUploadingPhoto && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                      <span>{isUploadingPhoto ? 'Uploading Photo...' : 'Add Photo to Gallery'}</span>
+                    </button>
                   </form>
                 </div>
 
-                {/* Custom photos list */}
-                <div className="bg-white p-5 sm:p-6 rounded-2xl border border-stone-200">
-                  <div className="flex items-center justify-between mb-4">
+                {/* List of uploaded custom photos */}
+                <div className="bg-white p-5 sm:p-6 rounded-2xl border border-stone-200 shadow-xs space-y-4">
+                  <div className="flex items-center justify-between">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-stone-700">
                       Uploaded Custom Photos ({customPhotos.length})
                     </h4>
@@ -806,9 +965,53 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
               </div>
             )}
 
-            {/* Tab 3: Settings & Backup */}
+            {/* Tab 3: Settings & Supabase Status */}
             {activeTab === 'settings' && (
               <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+                {/* Supabase Connection Card */}
+                <div className="bg-white p-5 sm:p-6 rounded-2xl border border-stone-200 shadow-xs space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700">
+                        <Database className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-stone-900 font-display">
+                          Supabase Backend Status
+                        </h4>
+                        <p className="text-xs text-stone-500">
+                          {isSupabaseConfigured
+                            ? 'Connected to persistent cloud database'
+                            : 'Running in Local Cache mode (configure Supabase in Vercel/environment to enable cloud persistence)'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {isSupabaseConfigured ? (
+                      <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5" /> Connected
+                      </span>
+                    ) : (
+                      <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                        Not Connected
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="p-4 bg-stone-50 rounded-xl border border-stone-200 text-xs text-stone-600 space-y-2">
+                    <p className="font-semibold text-stone-800">
+                      Required Environment Variables for Vercel / Production:
+                    </p>
+                    <ul className="list-disc list-inside space-y-1 font-mono text-[11px] text-stone-700">
+                      <li>VITE_SUPABASE_URL = {SUPABASE_URL ? `${SUPABASE_URL.slice(0, 24)}...` : '(not set)'}</li>
+                      <li>VITE_SUPABASE_ANON_KEY = (your Supabase anon public key)</li>
+                    </ul>
+                    <p className="text-[11px] text-stone-500 pt-1">
+                      A ready-to-run database initialization script is saved in <code className="text-stone-800 font-mono">/supabase-schema.sql</code>.
+                    </p>
+                  </div>
+                </div>
+
                 <div className="bg-white p-5 sm:p-6 rounded-2xl border border-stone-200 shadow-xs space-y-5">
                   <h4 className="text-sm font-bold text-stone-900 font-display">
                     Portal Configuration

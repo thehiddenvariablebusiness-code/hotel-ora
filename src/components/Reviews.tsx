@@ -14,7 +14,9 @@ import {
 import {
   Review,
   getApprovedReviews,
-  addReview,
+  fetchApprovedReviews,
+  submitReview,
+  uploadImageToStorage,
   getHotelSettings,
 } from '../data/storage';
 import { useScrollReveal, getDirectionalRevealStyle } from '../hooks/useScrollReveal';
@@ -37,21 +39,32 @@ export const Reviews: React.FC = () => {
   const [hoverRating, setHoverRating] = useState(0);
   const [message, setMessage] = useState('');
   const [stayDate, setStayDate] = useState('');
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoDataUrl, setPhotoDataUrl] = useState<string>('');
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Load reviews on mount and when storage changes
   useEffect(() => {
-    const load = () => {
+    let isMounted = true;
+    const load = async () => {
+      // First populate instantly from local cache
       setReviews(getApprovedReviews());
+      // Then fetch from Supabase if configured
+      const remote = await fetchApprovedReviews();
+      if (isMounted) {
+        setReviews(remote);
+      }
     };
     load();
 
-    const handleStorageUpdate = () => load();
+    const handleStorageUpdate = () => {
+      setReviews(getApprovedReviews());
+    };
     window.addEventListener('hotel-storage-updated', handleStorageUpdate);
     window.addEventListener('storage', handleStorageUpdate);
     return () => {
+      isMounted = false;
       window.removeEventListener('hotel-storage-updated', handleStorageUpdate);
       window.removeEventListener('storage', handleStorageUpdate);
     };
@@ -59,7 +72,7 @@ export const Reviews: React.FC = () => {
 
   const settings = useMemo(() => getHotelSettings(), [reviews]);
 
-  // Handle image upload via FileReader
+  // Handle image upload via File or FileReader
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -69,6 +82,7 @@ export const Reviews: React.FC = () => {
       return;
     }
 
+    setPhotoFile(file);
     const reader = new FileReader();
     reader.onloadend = () => {
       setPhotoDataUrl(reader.result as string);
@@ -77,7 +91,7 @@ export const Reviews: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!guestName.trim()) {
       setFormError('Please enter your name.');
@@ -92,12 +106,23 @@ export const Reviews: React.FC = () => {
     setFormError('');
 
     try {
-      addReview({
+      let finalPhotoUrl = photoDataUrl || undefined;
+
+      // If user selected a file, upload to Supabase Storage bucket
+      if (photoFile) {
+        try {
+          finalPhotoUrl = await uploadImageToStorage(photoFile, 'reviews');
+        } catch (uploadErr) {
+          console.warn('Storage upload fallback to data URL:', uploadErr);
+        }
+      }
+
+      await submitReview({
         guestName: guestName.trim(),
         rating,
         message: message.trim(),
         stayDate: stayDate.trim() || undefined,
-        photoUrl: photoDataUrl || undefined,
+        photoUrl: finalPhotoUrl,
       });
 
       setSubmissionSuccess(true);
@@ -106,6 +131,7 @@ export const Reviews: React.FC = () => {
       setRating(5);
       setMessage('');
       setStayDate('');
+      setPhotoFile(null);
       setPhotoDataUrl('');
     } catch (err) {
       setFormError('An error occurred while saving your review. Please try again.');

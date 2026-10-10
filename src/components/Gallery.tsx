@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Maximize2, X, ChevronLeft, ChevronRight, MessageCircle } from 'lucide-react';
-import { GalleryItem, getWhatsAppBookingUrl } from '../data/hotelConfig';
-import { getAllGalleryItems } from '../data/storage';
+import { GalleryItem, getWhatsAppBookingUrl, HOTEL_CONFIG } from '../data/hotelConfig';
+import { getAllGalleryItems, fetchCustomPhotos } from '../data/storage';
 import { HotelImage } from './HotelImage';
 import { useScrollReveal, getDirectionalRevealStyle } from '../hooks/useScrollReveal';
 
@@ -18,12 +18,23 @@ export const Gallery: React.FC = () => {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   useEffect(() => {
+    let isMounted = true;
+    const syncPhotos = async () => {
+      setGalleryItems(getAllGalleryItems());
+      const custom = await fetchCustomPhotos();
+      if (isMounted) {
+        setGalleryItems([...HOTEL_CONFIG.gallery, ...custom]);
+      }
+    };
+    syncPhotos();
+
     const handleUpdate = () => {
       setGalleryItems(getAllGalleryItems());
     };
     window.addEventListener('hotel-storage-updated', handleUpdate);
     window.addEventListener('storage', handleUpdate);
     return () => {
+      isMounted = false;
       window.removeEventListener('hotel-storage-updated', handleUpdate);
       window.removeEventListener('storage', handleUpdate);
     };
