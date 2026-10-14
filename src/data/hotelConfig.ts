@@ -97,7 +97,7 @@ export const HOTEL_CONFIG = {
       description: 'Comfortable air-conditioned room featuring fresh bedding, quiet atmosphere, and prompt room service.',
       facilities: ['Air Conditioning (AC)', 'Free Wi-Fi', 'Room Service', '24×7 Reception'],
       imageUrl: '/images/hotel/hotel-room-1.png',
-      imageAlt: 'HOTEL ORA room',
+      imageAlt: 'HOTEL ORA air-conditioned guest room with comfortable bed in Hojai',
       isConfirmedCategory: false,
     },
     {
@@ -107,7 +107,7 @@ export const HOTEL_CONFIG = {
       description: 'Well-maintained guest room with clean linens, attached bath facilities, and secure surroundings.',
       facilities: ['Air Conditioning (AC)', 'Free Wi-Fi', 'Room Service', 'CCTV Security'],
       imageUrl: '/images/hotel/hotel-room-2.png',
-      imageAlt: 'HOTEL ORA room',
+      imageAlt: 'HOTEL ORA comfort double room with neat linens and attached bathroom',
       isConfirmedCategory: false,
     },
     {
@@ -117,7 +117,7 @@ export const HOTEL_CONFIG = {
       description: 'Peaceful room tailored for comfortable individual or family stays on Main Road Hojai.',
       facilities: ['Air Conditioning (AC)', 'Free Wi-Fi', 'Room Service', '24×7 Reception'],
       imageUrl: '/images/hotel/hotel-room-3.png',
-      imageAlt: 'HOTEL ORA room',
+      imageAlt: 'HOTEL ORA spacious guest room accommodation on Main Road Hojai',
       isConfirmedCategory: false,
     },
   ] as RoomEntry[],
@@ -169,7 +169,7 @@ export const HOTEL_CONFIG = {
       subtitle: 'Main Road Hojai',
       category: 'EXTERIOR',
       imageUrl: '/images/hotel/hotel-exterior.png',
-      imageAlt: 'HOTEL ORA exterior',
+      imageAlt: 'HOTEL ORA hotel exterior building on Main Road opposite UCO Bank, Hojai, Assam',
       description: 'Street-level exterior view of HOTEL ORA located on Main Road Hojai, opposite UCO Bank.',
     },
     {
@@ -178,7 +178,7 @@ export const HOTEL_CONFIG = {
       subtitle: '24×7 Front Desk',
       category: 'RECEPTION',
       imageUrl: '/images/hotel/hotel-reception.png',
-      imageAlt: 'HOTEL ORA reception',
+      imageAlt: 'HOTEL ORA 24x7 reception front desk with official signage for guest check-in',
       description: 'Welcoming front desk reception desk with official HOTEL ORA signage for check-in and assistance.',
     },
     {
@@ -187,7 +187,7 @@ export const HOTEL_CONFIG = {
       subtitle: 'Clean & Comfortable',
       category: 'ROOMS',
       imageUrl: '/images/hotel/hotel-room-1.png',
-      imageAlt: 'HOTEL ORA room',
+      imageAlt: 'HOTEL ORA air-conditioned guest bedroom with fresh bedding in Hojai',
       description: 'Neat guest room with air conditioning, crisp bedding, and peaceful atmosphere.',
     },
     {
@@ -196,7 +196,7 @@ export const HOTEL_CONFIG = {
       subtitle: 'Double Bed Accommodation',
       category: 'ROOMS',
       imageUrl: '/images/hotel/hotel-room-2.png',
-      imageAlt: 'HOTEL ORA room',
+      imageAlt: 'HOTEL ORA double bed guest room interior with tidy furnishings',
       description: 'Comfortable guest bedroom arranged for business travelers and visiting families.',
     },
     {
@@ -205,7 +205,7 @@ export const HOTEL_CONFIG = {
       subtitle: 'Restful Ambiance',
       category: 'ROOMS',
       imageUrl: '/images/hotel/hotel-room-3.png',
-      imageAlt: 'HOTEL ORA room',
+      imageAlt: 'HOTEL ORA clean and peaceful guest room accommodation in Hojai',
       description: 'Hygienic and well-ventilated guest room with essential amenities.',
     },
     {
@@ -214,7 +214,7 @@ export const HOTEL_CONFIG = {
       subtitle: 'CCTV Monitored',
       category: 'INTERIOR',
       imageUrl: '/images/hotel/hotel-corridor-1.png',
-      imageAlt: 'HOTEL ORA corridor',
+      imageAlt: 'HOTEL ORA CCTV-monitored interior hallway and corridor passageway',
       description: 'Clean interior hallways with round-the-clock security surveillance and bright lighting.',
     },
     {
@@ -223,7 +223,7 @@ export const HOTEL_CONFIG = {
       subtitle: 'Well-Maintained Spaces',
       category: 'INTERIOR',
       imageUrl: '/images/hotel/hotel-corridor-2.png',
-      imageAlt: 'HOTEL ORA corridor',
+      imageAlt: 'HOTEL ORA well-maintained guest room floor corridor with bright lighting',
       description: 'Clean indoor circulation area connecting floors and guest rooms.',
     },
   ] as GalleryItem[],

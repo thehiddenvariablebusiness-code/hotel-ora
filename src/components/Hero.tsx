@@ -77,7 +77,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenBookingModal }) => {
                 <HotelLogo size="lg" />
               </div>
 
-              <h1 className="sr-only">{HOTEL_CONFIG.name}</h1>
+              <h1 className="sr-only">HOTEL ORA — Hotel in Hojai, Assam</h1>
             </div>
 
             {/* Step 2: Tagline */}
@@ -161,7 +161,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenBookingModal }) => {
               >
                 <HotelImage
                   src="/images/hotel/hotel-exterior.png"
-                  alt="HOTEL ORA exterior"
+                  alt="HOTEL ORA hotel exterior on Main Road opposite UCO Bank, Hojai, Assam"
                   aspectRatio="4:3"
                   priority={true}
                   className="w-full"

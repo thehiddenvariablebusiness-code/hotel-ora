@@ -23,7 +23,7 @@ export const HotelLogo: React.FC<HotelLogoProps> = ({
     <div className={`flex items-center select-none group ${className}`}>
       <img
         src="/images/hotel/hotel-ora-logo.svg"
-        alt="HOTEL ORA"
+        alt="HOTEL ORA - Hotel in Hojai, Assam"
         className={`${heightClass} w-auto object-contain shrink-0 transition-transform duration-300 group-hover:scale-[1.02]`}
         loading="eager"
         decoding="async"
