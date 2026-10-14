@@ -42,87 +42,99 @@
     <!-- Favicon: Official HOTEL ORA Logo -->
     <link rel="icon" type="image/svg+xml" href="/images/hotel/hotel-ora-logo.svg" />
 
-    <!-- Structured Data (JSON-LD) for LocalBusiness / Hotel -->
-    <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "Hotel",
-        "name": "HOTEL ORA",
-        "url": "https://hotelora.co.in/",
-        "image": [
-          "/images/hotel/hotel-exterior.png",
-          "/images/hotel/hotel-reception.png",
-          "/images/hotel/hotel-room-1.png"
-        ],
-        "description": "HOTEL ORA in Hojai, Assam offers comfortable stays with AC rooms, Wi-Fi, room service and 24×7 reception. Located on Main Road opposite UCO Bank. Call or WhatsApp for booking.",
-        "telephone": "+919282484800",
-        "email": "hotelora8@gmail.com",
-        "priceRange": "₹800 - ₹1,990",
-        "currenciesAccepted": "INR",
-        "paymentAccepted": "Cash, UPI, Debit Card, Credit Card",
-        "hasMap": "https://maps.app.goo.gl/bpvy68N4bjsptSCz6?g_st=aw",
-        "sameAs": [
-          "https://maps.app.goo.gl/bpvy68N4bjsptSCz6?g_st=aw"
-        ],
-        "address": {
-          "@type": "PostalAddress",
-          "streetAddress": "Main Road Hojai, Opp. UCO Bank, 706, J. K. Kedia Rd",
-          "addressLocality": "Hojai",
-          "addressRegion": "Assam",
-          "postalCode": "782436",
-          "addressCountry": "IN"
-        },
-        "geo": {
-          "@type": "GeoCoordinates",
-          "latitude": 26.0028,
-          "longitude": 92.8631
-        },
-        "openingHoursSpecification": [
-          {
-            "@type": "OpeningHoursSpecification",
-            "dayOfWeek": [
-              "Monday",
-              "Tuesday",
-              "Wednesday",
-              "Thursday",
-              "Friday",
-              "Saturday",
-              "Sunday"
-            ],
-            "opens": "00:00",
-            "closes": "23:59"
-          }
-        ],
-        "amenityFeature": [
-          {
-            "@type": "LocationFeatureSpecification",
-            "name": "Free Wi-Fi",
-            "value": true
-          },
-          {
-            "@type": "LocationFeatureSpecification",
-            "name": "AC Rooms",
-            "value": true
-          },
-          {
-            "@type": "LocationFeatureSpecification",
-            "name": "Room Service",
-            "value": true
-          },
-          {
-            "@type": "LocationFeatureSpecification",
-            "name": "24×7 Reception",
-            "value": true
-          },
-          {
-            "@type": "LocationFeatureSpecification",
-            "name": "CCTV / Security",
-            "value": true
-          }
-        ],
-        "checkoutTime": "12:00:00"
-      }
-    </script>
+   
+<!-- Website Name Structured Data for Google Search -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "HOTEL ORA",
+  "alternateName": [
+    "Hotel Ora",
+    "Ora Hotel",
+    "hotelora.co.in"
+  ],
+  "url": "https://hotelora.co.in/"
+}
+</script>
+
+<!-- Hotel Structured Data -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Hotel",
+  "name": "HOTEL ORA",
+  "url": "https://hotelora.co.in/",
+  "image": [
+    "https://hotelora.co.in/images/hotel/hotel-exterior.png",
+    "https://hotelora.co.in/images/hotel/hotel-reception.png",
+    "https://hotelora.co.in/images/hotel/hotel-room-1.png"
+  ],
+  "description": "HOTEL ORA in Hojai, Assam offers comfortable stays with AC rooms, Wi-Fi, room service and 24×7 reception. Located on Main Road opposite UCO Bank. Call or WhatsApp for booking.",
+  "telephone": "+919282484800",
+  "email": "hotelora8@gmail.com",
+  "priceRange": "₹800 - ₹1,990",
+  "currenciesAccepted": "INR",
+  "hasMap": "https://maps.app.goo.gl/bpvy68N4bjsptSCz6?g_st=aw",
+  "address": {
+    "@type": "PostalAddress",
+    "streetAddress": "Main Road, Opp. UCO Bank, 706, J. K. Kedia Rd",
+    "addressLocality": "Hojai",
+    "addressRegion": "Assam",
+    "postalCode": "782436",
+    "addressCountry": "IN"
+  },
+  "geo": {
+    "@type": "GeoCoordinates",
+    "latitude": 26.0028,
+    "longitude": 92.8631
+  },
+  "openingHoursSpecification": [
+    {
+      "@type": "OpeningHoursSpecification",
+      "dayOfWeek": [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday"
+      ],
+      "opens": "00:00",
+      "closes": "23:59"
+    }
+  ],
+  "amenityFeature": [
+    {
+      "@type": "LocationFeatureSpecification",
+      "name": "Wi-Fi",
+      "value": true
+    },
+    {
+      "@type": "LocationFeatureSpecification",
+      "name": "Air-conditioned rooms",
+      "value": true
+    },
+    {
+      "@type": "LocationFeatureSpecification",
+      "name": "Room service",
+      "value": true
+    },
+    {
+      "@type": "LocationFeatureSpecification",
+      "name": "24-hour reception",
+      "value": true
+    },
+    {
+      "@type": "LocationFeatureSpecification",
+      "name": "CCTV security",
+      "value": true
+    }
+  ],
+  "checkoutTime": "12:00:00"
+}
+</script>
   </head>
   <body class="bg-[#FAF9F5] text-stone-900 antialiased selection:bg-[#C5A880]/30 selection:text-stone-900">
     <div id="root"></div>
